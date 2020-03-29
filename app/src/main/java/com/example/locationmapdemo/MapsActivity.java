@@ -1,7 +1,6 @@
 package com.example.locationmapdemo;
 
 import android.Manifest;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Address;
@@ -10,11 +9,11 @@ import android.location.Location;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
-import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.PopupMenu;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -41,13 +40,14 @@ import java.util.Locale;
 
 public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback,
         LocationListener, GoogleApiClient.ConnectionCallbacks,
-        GoogleApiClient.OnConnectionFailedListener {
+        GoogleApiClient.OnConnectionFailedListener,PopupMenu.OnMenuItemClickListener {
 
     private GoogleMap mMap;
     Location mLastLocation;
     Marker mCurrLocationMarker;
     GoogleApiClient mGoogleApiClient;
     LocationRequest mLocationRequest;
+
     List<Address> addressList;
     EditText locationSearch;
 
@@ -60,6 +60,17 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
+
+        Button btnChooseMapType = (Button) findViewById(R.id.btnChooseMapType);
+        btnChooseMapType.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                PopupMenu popup = new PopupMenu(getApplicationContext(), v);
+                popup.setOnMenuItemClickListener(MapsActivity.this);
+                popup.inflate(R.menu.options_menu);
+                popup.show();
+            }
+        });
 
         locationSearch = (EditText) findViewById(R.id.editTextSearch);
         final Button buttonGetCurrentLocation=(Button)findViewById(R.id.buttonGetCurrentLocation);
@@ -80,7 +91,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                     //move map camera
                     mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
                     mMap.animateCamera(CameraUpdateFactory.zoomTo(11));
-                    Toast.makeText(getApplicationContext(),"Latitude: "+mLastLocation.getLatitude()
+                    Toast.makeText(getApplicationContext(),"Current Location\nLatitude: "+mLastLocation.getLatitude()
                             +"\nLongtitude: "+mLastLocation.getLongitude(),Toast.LENGTH_SHORT).show();
                 }
                 catch (Exception ex){
@@ -172,12 +183,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.options_menu, menu);
-        return true;
-    }
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
+    public boolean onMenuItemClick(MenuItem item) {
         Toast.makeText(this, "Selected Map: " +item.getTitle(), Toast.LENGTH_SHORT).show();
         switch (item.getItemId()) {
             case R.id.normal_map:
@@ -193,44 +199,12 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
                 mMap.setMapType(GoogleMap.MAP_TYPE_TERRAIN);
                 return true;
             default:
-                return super.onOptionsItemSelected(item);
+                return false;
         }
     }
 
     public void searchLocation(View view) {
-        String location = locationSearch.getText().toString();
-
-        if (!location.equals("")) {
-            try {
-                addressList=new SearchTask(getApplicationContext()).execute(location).get();
-                if(addressList.size()>0){
-                    //change map type to hybrid=normal+satellite
-                    if(mMap.getMapType()!=GoogleMap.MAP_TYPE_HYBRID){
-                        mMap.setMapType(GoogleMap.MAP_TYPE_HYBRID);
-                    }
-                    Address address = addressList.get(0);
-                    LatLng latLng = new LatLng(address.getLatitude(), address.getLongitude());
-                    if (mCurrLocationMarker != null) {
-                        mCurrLocationMarker.remove();
-                    }
-                    MarkerOptions markerOptions = new MarkerOptions();
-                    markerOptions.position(latLng);
-                    markerOptions.title(location);
-                    mCurrLocationMarker = mMap.addMarker(markerOptions);
-
-                    mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng));
-                    Toast.makeText(getApplicationContext(),"Latitude: "+address.getLatitude()+"\nLongtitude: "+address.getLongitude(),Toast.LENGTH_LONG).show();
-                }
-                else{
-                    Toast.makeText(getApplicationContext(),"Can't find this address!",Toast.LENGTH_SHORT).show();
-                }
-            } catch (Exception e) {
-                Toast.makeText(getApplicationContext(),e.getMessage(),Toast.LENGTH_SHORT).show();
-            }
-        }
-        else{
-            Toast.makeText(getApplicationContext(),"Invalid Address",Toast.LENGTH_SHORT).show();
-        }
+        new SearchLocationAsyncTask(locationSearch.getText().toString()).execute();
     }
 
     @Override
@@ -256,24 +230,48 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         }
     }
 
-    private class SearchTask extends AsyncTask<String,Void,List<Address>>{
-        private Context ContextAsync;
-        public SearchTask (Context context){
-            this.ContextAsync = context;
+    public class SearchLocationAsyncTask extends AsyncTask<Void,Void,Address>{
+        String errorMessage = "";
+        String name;
+
+        SearchLocationAsyncTask(String name){
+            this.name=name;
         }
 
         @Override
-        protected List<Address> doInBackground(String... params){
-            Geocoder geocoder = new Geocoder(ContextAsync, Locale.getDefault());
-
-            List<Address> addressList = null;
+        protected Address doInBackground(Void... voids) {
+            Geocoder geocoder = new Geocoder(MapsActivity.this, Locale.getDefault());
+            List<Address> addresses = null;
             try {
-                addressList = geocoder.getFromLocationName(params[0], 1);
-                return addressList;
+                addresses = geocoder.getFromLocationName(name, 1);
             } catch (IOException e) {
-                e.printStackTrace();
+                errorMessage="Can't find this location due to: \n"+e.getMessage();
             }
+            if(addresses != null && addresses.size() > 0)
+            {
+                return addresses.get(0);
+            }
+
             return null;
+        }
+
+        protected void onPostExecute(Address address) {
+            if(address == null) {
+                Toast.makeText(MapsActivity.this,errorMessage,Toast.LENGTH_SHORT).show();
+            }
+            else {
+                if(mMap.getMapType()!=GoogleMap.MAP_TYPE_HYBRID){
+                    mMap.setMapType(GoogleMap.MAP_TYPE_HYBRID);
+                }
+                LatLng latLng = new LatLng(address.getLatitude(), address.getLongitude());
+                MarkerOptions markerOptions = new MarkerOptions();
+                markerOptions.position(latLng);
+                markerOptions.icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_MAGENTA));
+                mCurrLocationMarker = mMap.addMarker(markerOptions);
+
+                mMap.animateCamera(CameraUpdateFactory.newLatLng(latLng));
+                Toast.makeText(getApplicationContext(),name+"\nLatitude: "+address.getLatitude()+"\nLongtitude: "+address.getLongitude(),Toast.LENGTH_LONG).show();
+            }
         }
     }
 }
