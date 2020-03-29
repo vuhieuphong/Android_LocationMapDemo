@@ -48,7 +48,6 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     GoogleApiClient mGoogleApiClient;
     LocationRequest mLocationRequest;
 
-    List<Address> addressList;
     EditText locationSearch;
 
     @Override
@@ -149,7 +148,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     public void onConnectionSuspended(int i) {
-
+        Toast.makeText(this, "Connection Suspended!", Toast.LENGTH_SHORT).show();
     }
 
     @Override
@@ -179,7 +178,7 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
 
     @Override
     public void onConnectionFailed(ConnectionResult connectionResult) {
-
+        Toast.makeText(this, "Connection Failed!", Toast.LENGTH_SHORT).show();
     }
 
     @Override
